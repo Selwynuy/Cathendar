@@ -474,7 +474,17 @@ Follow PEP 8 Python style guide. Consider using:
 **Solution**: Run `python manage.py migrate`
 
 **Issue**: Cannot access admin panel
-**Solution**: Ensure user has `is_staff=True`. Use `python make_staff.py` or Django admin.
+**Solution**: Ensure user has `is_staff=True`. Use Django admin to set staff status, or use Django shell:
+```bash
+python manage.py shell
+```
+Then run:
+```python
+from core.models import User
+user = User.objects.get(username='your_username')
+user.is_staff = True
+user.save()
+```
 
 **Issue**: Holidays not showing
 **Solution**: Run `python manage.py populate_holidays --country US --years 2024 2026`
