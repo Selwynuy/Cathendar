@@ -14,11 +14,11 @@ def admin_login(request):
         return redirect('admin_panel:dashboard')
     
     if request.method == 'POST':
-        email = request.POST.get('email')
+        username = request.POST.get('username')
         password = request.POST.get('password')
         
-        if email and password:
-            user = authenticate(request, username=email, password=password)
+        if username and password:
+            user = authenticate(request, username=username, password=password)
             if user and user.is_staff:
                 login(request, user)
                 return redirect('admin_panel:dashboard')

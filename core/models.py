@@ -5,8 +5,8 @@ from django.conf import settings
 class User(AbstractUser):
     email = models.EmailField(unique=True)
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username']
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email']
 
 class Calendar(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='calendars')
@@ -60,3 +60,23 @@ class CalendarShare(models.Model):
 
     class Meta:
         unique_together = ('calendar', 'user')
+
+
+class Holiday(models.Model):
+    """Public holidays that can be displayed in calendars"""
+    date = models.DateField()
+    name = models.CharField(max_length=200)
+    country = models.CharField(max_length=10, help_text="ISO country code (e.g., 'US', 'GB', 'CA')")
+    description = models.TextField(blank=True)
+    is_national = models.BooleanField(default=True, help_text="Whether this is a national holiday")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('date', 'name', 'country')
+        ordering = ['date']
+        indexes = [
+            models.Index(fields=['date', 'country']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.date})"

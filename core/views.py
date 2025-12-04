@@ -7,10 +7,11 @@ from django.db.models import Q
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 
-from .models import User, Calendar, Event, Availability, Friend, CalendarShare
+from .models import User, Calendar, Event, Availability, Friend, CalendarShare, Holiday
 from .serializers import (
     UserSerializer, UserRegistrationSerializer, CalendarSerializer,
-    EventSerializer, AvailabilitySerializer, FriendSerializer, CalendarShareSerializer
+    EventSerializer, AvailabilitySerializer, FriendSerializer, CalendarShareSerializer,
+    HolidaySerializer
 )
 
 
@@ -21,6 +22,14 @@ class UserRegistrationView(APIView):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
+            
+            # Auto-create a default calendar for the new user
+            Calendar.objects.create(
+                owner=user,
+                name=f"{user.username}'s Calendar",
+                description="My default calendar"
+            )
+            
             # Create Django session for @login_required decorator
             from django.contrib.auth import login
             login(request, user)
@@ -39,11 +48,11 @@ class UserLoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        email = request.data.get('email')
+        username = request.data.get('username')
         password = request.data.get('password')
         
-        if email and password:
-            user = authenticate(request, username=email, password=password)
+        if username and password:
+            user = authenticate(request, username=username, password=password)
             if user:
                 # Create Django session for @login_required decorator
                 from django.contrib.auth import login
@@ -117,6 +126,43 @@ class CalendarViewSet(viewsets.ModelViewSet):
         
         serializer = CalendarShareSerializer(share)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def create_shared(self, request):
+        """Create a new shared calendar with another user"""
+        user_id = request.data.get('user_id')
+        calendar_name = request.data.get('name', '')
+        
+        if not user_id:
+            return Response({'error': 'user_id is required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        other_user = get_object_or_404(User, id=user_id)
+        
+        if other_user == request.user:
+            return Response({'error': 'Cannot create shared calendar with yourself'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate calendar name if not provided
+        if not calendar_name:
+            calendar_name = f"{request.user.username} & {other_user.username}"
+        
+        # Create the shared calendar
+        shared_calendar = Calendar.objects.create(
+            owner=request.user,
+            name=calendar_name,
+            description=f"Shared calendar between {request.user.username} and {other_user.username}"
+        )
+        
+        # Automatically share it with the other user
+        CalendarShare.objects.create(
+            calendar=shared_calendar,
+            user=other_user,
+            permission=CalendarShare.Permission.VIEW_ONLY
+        )
+        
+        serializer = CalendarSerializer(shared_calendar)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class EventViewSet(viewsets.ModelViewSet):
@@ -242,3 +288,47 @@ class CalendarShareViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return CalendarShare.objects.filter(calendar__owner=self.request.user)
+
+
+class HolidayViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = HolidaySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        country = self.request.query_params.get('country', 'US')
+        year = self.request.query_params.get('year')
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        
+        queryset = Holiday.objects.filter(country=country)
+        
+        if year:
+            queryset = queryset.filter(date__year=year)
+        if start_date:
+            queryset = queryset.filter(date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(date__lte=end_date)
+        
+        return queryset.order_by('date')
+    
+    @action(detail=False, methods=['get'])
+    def for_date_range(self, request):
+        """Get holidays for a specific date range"""
+        country = request.query_params.get('country', 'US')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        
+        if not start_date or not end_date:
+            return Response(
+                {'error': 'start_date and end_date are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        holidays = Holiday.objects.filter(
+            country=country,
+            date__gte=start_date,
+            date__lte=end_date
+        ).order_by('date')
+        
+        serializer = self.get_serializer(holidays, many=True)
+        return Response(serializer.data)

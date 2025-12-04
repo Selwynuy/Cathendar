@@ -451,12 +451,20 @@
     <div class="calendar-sidebar">
         <div class="sidebar-section">
             <h3>My Calendars</h3>
+            <p style="color: #64748b; font-size: 12px; margin-bottom: 10px; font-style: italic;">
+                All calendars are merged in the main view. Click to highlight.
+            </p>
             <ul class="calendar-list" id="calendarsList">
                 <li class="loading">Loading...</li>
             </ul>
         </div>
         <div class="sidebar-section">
-            <button class="btn btn-primary" onclick="showCreateCalendar()" style="width: 100%;">+ New Calendar</button>
+            <button class="btn btn-primary" onclick="showShareWithUser()" style="width: 100%;">
+                <i class="fas fa-user-plus" style="margin-right: 6px;"></i> Share With User
+            </button>
+            <p style="color: #94a3b8; font-size: 11px; margin-top: 8px; text-align: center; font-style: italic;">
+                Create a shared calendar with another user
+            </p>
         </div>
     </div>
 </div>
@@ -476,7 +484,9 @@
     let selectedCalendarId = null;
     let events = [];
     let availabilities = [];
+    let holidays = [];
     const currentUserId = {% if user.is_authenticated %}{{ user.id }}{% else %}0{% endif %};
+    const userCountry = 'US'; // Default country, can be made user-configurable
 
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'];
@@ -490,13 +500,13 @@
     function changeMonth(direction) {
         currentDate.setMonth(currentDate.getMonth() + direction);
         updateMonthDisplay();
-        renderCalendar();
+        loadAllCalendarData(); // Reload holidays for new month
     }
 
     function goToToday() {
         currentDate = new Date();
         updateMonthDisplay();
-        renderCalendar();
+        loadAllCalendarData(); // Reload holidays for current month
     }
 
 
@@ -535,22 +545,26 @@
         list.innerHTML = calendars.map(cal => {
             const calendarOwnerId = cal.owner ? (typeof cal.owner === 'object' ? cal.owner.id : cal.owner) : null;
             const canDelete = calendarOwnerId === currentUserId;
-            const canShare = calendarOwnerId === currentUserId;
+            const isShared = calendarOwnerId !== currentUserId;
             return `
             <li class="calendar-item ${selectedCalendarId === cal.id ? 'active' : ''}" 
                 onclick="selectCalendar(${cal.id})">
                 <span>
                     <span class="calendar-color" style="background: #667eea;"></span>
                     ${cal.name}
+                    ${isShared ? '<span style="color: #94a3b8; font-size: 11px; margin-left: 6px;">(Shared)</span>' : ''}
                 </span>
-                ${canShare ? `
+                ${canDelete ? `
                     <div class="calendar-actions" onclick="event.stopPropagation();">
-                        <button class="calendar-share-btn" onclick="showShareCalendar(${cal.id}, '${cal.name.replace(/'/g, "\\'")}');" title="Share calendar">
-                            <i class="fas fa-share-alt"></i>
-                        </button>
                         <button class="calendar-delete-btn" onclick="deleteCalendar(${cal.id}, '${cal.name.replace(/'/g, "\\'")}');" title="Delete calendar">
                             <i class="fas fa-trash-alt"></i>
                         </button>
+                    </div>
+                ` : isShared ? `
+                    <div class="calendar-actions" onclick="event.stopPropagation();">
+                        <span style="color: #94a3b8; font-size: 12px;" title="Shared calendar - view only">
+                            <i class="fas fa-eye"></i>
+                        </span>
                     </div>
                 ` : ''}
             </li>
@@ -569,6 +583,7 @@
         if (calendars.length === 0) {
             events = [];
             availabilities = [];
+            holidays = [];
             renderCalendar();
             return;
         }
@@ -589,6 +604,13 @@
             for (const calendarId of calendarIds) {
                 promises.push(fetchAPI(`availability/aggregated/?calendar_id=${calendarId}`));
             }
+            
+            // Load holidays for the current month/year
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+            const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+            promises.push(fetchAPI(`holidays/for_date_range/?country=${userCountry}&start_date=${startDate}&end_date=${endDate}`));
             
             const results = await Promise.all(promises);
             
@@ -612,9 +634,13 @@
                 availabilities = availabilities.concat(calendarAvailabilities);
             }
             
+            // Load holidays
+            holidays = results[results.length - 1] || [];
+            
             console.log('Loaded merged calendar data:', { 
                 eventsCount: events.length, 
                 availabilitiesCount: availabilities.length,
+                holidaysCount: holidays.length,
                 calendarsCount: calendars.length
             });
             
@@ -624,6 +650,7 @@
             console.error('Failed to load calendar data:', error);
             events = [];
             availabilities = [];
+            holidays = [];
             renderCalendar();
         }
     }
@@ -658,11 +685,21 @@
             const isToday = date.toDateString() === today.toDateString();
             const dayEvents = getEventsForDate(date);
             const dayAvailabilities = getAvailabilitiesForDate(date);
+            const dayHolidays = getHolidaysForDate(date);
             
             html += `<div class="calendar-day ${isToday ? 'today' : ''}" 
                           onclick="openDayModal('${date.toISOString()}')">
                 <div class="day-number">${day}</div>
                 <div class="day-events">
+                    ${dayHolidays.map(holiday => {
+                        const holidayName = (holiday.name || '').replace(/"/g, '&quot;').replace(/'/g, "&#39;");
+                        return `
+                        <div class="event-item holiday-item" onclick="event.stopPropagation(); showHolidayDetails('${holidayName}', '${holiday.country || userCountry}');" title="${holidayName} (Holiday)">
+                            <div class="event-dot holiday" style="background: #f59e0b;"></div>
+                            <span class="event-title" style="color: #f59e0b; font-weight: 500;">${holidayName}</span>
+                        </div>
+                    `;
+                    }).join('')}
                     ${dayEvents.map(e => {
                         const title = (e.title || '').replace(/"/g, '&quot;').replace(/'/g, "&#39;");
                         const desc = (e.description || '').replace(/"/g, '&quot;').replace(/'/g, "&#39;").replace(/\n/g, '\\n');
@@ -769,6 +806,54 @@
         });
         
         return Array.from(userAvailMap.values());
+    }
+
+    function getHolidaysForDate(date) {
+        if (!holidays || holidays.length === 0) {
+            return [];
+        }
+        const dateStr = date.toISOString().split('T')[0];
+        return holidays.filter(holiday => {
+            if (!holiday || !holiday.date) return false;
+            const holidayDate = holiday.date.split('T')[0];
+            return holidayDate === dateStr;
+        });
+    }
+
+    function showHolidayDetails(holidayName, country) {
+        document.getElementById('modalTitle').textContent = 'Holiday';
+        const modalBody = document.getElementById('modalBody');
+        
+        const escapeHtml = (text) => {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        };
+        
+        const safeName = escapeHtml(holidayName);
+        
+        modalBody.innerHTML = `
+            <div style="padding: 20px 0;">
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
+                        <i class="fas fa-calendar-check" style="color: #f59e0b; font-size: 24px;"></i>
+                        <h4 style="color: #667eea; margin: 0;">
+                            ${safeName}
+                        </h4>
+                    </div>
+                    <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                        <p style="color: #92400e; margin: 0; font-size: 14px;">
+                            <i class="fas fa-flag" style="margin-right: 6px;"></i>
+                            Public holiday in ${country}
+                        </p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal()">Close</button>
+                </div>
+            </div>
+        `;
+        openModal();
     }
 
     function openDayModal(dateISO) {
@@ -1137,137 +1222,92 @@
         openModal();
     }
 
-    async function showShareCalendar(calendarId, calendarName) {
+    async function showShareWithUser() {
         try {
-            // Load users and current shares
-            const [usersData, sharesData] = await Promise.all([
-                fetchAPI('users/'),
-                fetchAPI(`calendars/${calendarId}/shared_with/`)
-            ]);
-            
+            // Load all users
+            const usersData = await fetchAPI('users/');
             const users = usersData.results || usersData || [];
-            const shares = sharesData || [];
-            const sharedUserIds = shares.map(s => s.user ? (typeof s.user === 'object' ? s.user.id : s.user) : null).filter(id => id !== currentUserId);
             
-            document.getElementById('modalTitle').textContent = `Share Calendar: ${calendarName}`;
+            // Get calendars that are already shared (to filter out users we already have shared calendars with)
+            const existingSharedUserIds = new Set();
+            calendars.forEach(cal => {
+                // Check if this calendar is shared (not owned by current user)
+                const calendarOwnerId = cal.owner ? (typeof cal.owner === 'object' ? cal.owner.id : cal.owner) : null;
+                if (calendarOwnerId !== currentUserId) {
+                    existingSharedUserIds.add(calendarOwnerId);
+                }
+            });
+            
+            document.getElementById('modalTitle').textContent = 'Share With User';
             const modalBody = document.getElementById('modalBody');
             
             modalBody.innerHTML = `
                 <div style="padding: 20px 0;">
-                    <div style="margin-bottom: 20px;">
-                        <h4 style="color: #667eea; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                            <i class="fas fa-users"></i> Shared With
-                        </h4>
-                        ${shares.length > 0 ? `
-                            <div id="sharedUsersList" style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                ${shares.map(share => {
-                                    const shareUser = share.user ? (typeof share.user === 'object' ? share.user : {id: share.user}) : null;
-                                    if (!shareUser || shareUser.id === currentUserId) return '';
-                                    const permissionLabels = {
-                                        'view_only': 'View Only',
-                                        'edit': 'Edit',
-                                        'admin': 'Admin'
-                                    };
-                                    return `
-                                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
-                                            <span style="color: #475569;">
-                                                <i class="fas fa-user" style="margin-right: 8px; color: #667eea;"></i>
-                                                ${shareUser.email || shareUser.username || 'Unknown User'}
-                                                <span style="color: #94a3b8; font-size: 12px; margin-left: 8px;">(${permissionLabels[share.permission] || share.permission})</span>
-                                            </span>
-                                            <button class="btn btn-danger" style="padding: 4px 12px; font-size: 12px;" onclick="removeShare(${calendarId}, ${share.id})">
-                                                <i class="fas fa-times"></i> Remove
-                                            </button>
-                                        </div>
-                                    `;
+                    <p style="color: #64748b; font-size: 14px; margin-bottom: 20px;">
+                        Create a new shared calendar with another user. Both of you will be able to see events and availability in this calendar.
+                    </p>
+                    <form id="shareWithUserForm">
+                        <div class="form-group">
+                            <label>Select User to Share With *</label>
+                            <select name="user_id" id="shareUserSelect" class="form-control" required>
+                                <option value="">Choose a user...</option>
+                                ${users.filter(u => {
+                                    const userId = u.id || (typeof u === 'object' ? u.id : u);
+                                    return userId !== currentUserId && !existingSharedUserIds.has(userId);
+                                }).map(u => {
+                                    const userId = u.id || (typeof u === 'object' ? u.id : u);
+                                    const displayName = u.username || u.email || `User ${userId}`;
+                                    return `<option value="${userId}">${displayName}${u.email ? ` (${u.email})` : ''}</option>`;
                                 }).join('')}
-                            </div>
-                        ` : '<p style="color: #94a3b8; font-style: italic; padding: 15px;">No users shared yet.</p>'}
-                    </div>
-                    <hr>
-                    <div>
-                        <h4 style="color: #667eea; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                            <i class="fas fa-user-plus"></i> Share With New User
-                        </h4>
-                        <form id="shareCalendarForm">
-                            <div class="form-group">
-                                <label>Select User *</label>
-                                <select name="user_id" id="shareUserSelect" class="form-control" required>
-                                    <option value="">Choose a user...</option>
-                                    ${users.filter(u => {
-                                        const userId = u.id || (typeof u === 'object' ? u.id : u);
-                                        return userId !== currentUserId && !sharedUserIds.includes(userId);
-                                    }).map(u => {
-                                        const userId = u.id || (typeof u === 'object' ? u.id : u);
-                                        const displayName = u.email || u.username || `User ${userId}`;
-                                        return `<option value="${userId}">${displayName}</option>`;
-                                    }).join('')}
-                                </select>
-                            </div>
-                            <p style="color: #64748b; font-size: 12px; margin-top: 10px; margin-bottom: 20px;">
-                                <i class="fas fa-info-circle" style="margin-right: 6px;"></i>
-                                Shared users will have view-only access to the calendar and can see events and availability.
-                            </p>
-                            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                                <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closeModal()">Close</button>
-                                <button type="submit" class="btn btn-primary" style="flex: 1;">
-                                    <i class="fas fa-share-alt" style="margin-right: 6px;"></i> Share
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Calendar Name (Optional)</label>
+                            <input type="text" name="name" id="calendarName" class="form-control" placeholder="Leave empty for auto-generated name">
+                            <small style="color: #94a3b8; font-size: 11px; margin-top: 5px; display: block;">
+                                If left empty, will be named: "YourUsername & TheirUsername"
+                            </small>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closeModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" style="flex: 1;">
+                                <i class="fas fa-user-plus" style="margin-right: 6px;"></i> Create Shared Calendar
+                            </button>
+                        </div>
+                    </form>
                 </div>
             `;
             
             openModal();
             
-            document.getElementById('shareCalendarForm').addEventListener('submit', async (e) => {
+            document.getElementById('shareWithUserForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const formData = new FormData(e.target);
                 const data = {
                     user_id: parseInt(formData.get('user_id')),
-                    permission: 'view_only' // Default to view-only
+                    name: formData.get('name') || ''
                 };
                 
                 try {
-                    await fetchAPI(`calendars/${calendarId}/share/`, {
+                    await fetchAPI('calendars/create_shared/', {
                         method: 'POST',
                         body: JSON.stringify(data),
                     });
-                    showNotification('Success', 'Calendar shared successfully!', 'success');
-                    showShareCalendar(calendarId, calendarName); // Refresh the modal
+                    showNotification('Success', 'Shared calendar created successfully!', 'success');
+                    closeModal();
+                    await loadCalendars(); // Reload calendars to show the new shared calendar
                 } catch (error) {
-                    console.error('Failed to share calendar:', error);
-                    showNotification('Error', 'Failed to share calendar. Please try again.', 'error');
+                    console.error('Failed to create shared calendar:', error);
+                    const errorMsg = error.message || 'Failed to create shared calendar. Please try again.';
+                    showNotification('Error', errorMsg, 'error');
                 }
             });
         } catch (error) {
-            console.error('Failed to load share data:', error);
-            showNotification('Error', 'Failed to load share data. Please try again.', 'error');
+            console.error('Failed to load users:', error);
+            showNotification('Error', 'Failed to load users. Please try again.', 'error');
         }
     }
 
-    async function removeShare(calendarId, shareId) {
-        showConfirm(
-            'Remove Share',
-            'Are you sure you want to remove this user\'s access to the calendar?',
-            async () => {
-                try {
-                    await fetchAPI(`calendar-shares/${shareId}/`, {
-                        method: 'DELETE',
-                    });
-                    showNotification('Success', 'User removed from calendar successfully!', 'success');
-                    const calendar = calendars.find(c => c.id === calendarId);
-                    if (calendar) {
-                        showShareCalendar(calendarId, calendar.name);
-                    }
-                } catch (error) {
-                    console.error('Failed to remove share:', error);
-                    showNotification('Error', 'Failed to remove share. Please try again.', 'error');
-                }
-            }
-        );
-    }
 
     async function deleteCalendar(calendarId, calendarName) {
         // Show confirmation modal
@@ -1293,45 +1333,6 @@
         );
     }
 
-    function showCreateCalendar() {
-        const date = new Date();
-        document.getElementById('modalTitle').textContent = 'Create New Calendar';
-        const modalBody = document.getElementById('modalBody');
-        modalBody.innerHTML = `
-            <form id="createCalendarForm">
-                <div class="form-group">
-                    <label>Calendar Name *</label>
-                    <input type="text" name="name" class="form-control" placeholder="Enter calendar name" required autofocus>
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea name="description" class="form-control" placeholder="Add a description (optional)"></textarea>
-                </div>
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" style="flex: 1;">Create Calendar</button>
-                </div>
-            </form>
-        `;
-        openModal();
-
-        document.getElementById('createCalendarForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
-            try {
-                await fetchAPI('calendars/', {
-                    method: 'POST',
-                    body: JSON.stringify({ name: data.name, description: data.description || '' })
-                });
-                closeModal();
-                showNotification('Success', 'Calendar created successfully!', 'success');
-                loadCalendars();
-            } catch (error) {
-                showNotification('Error', 'Failed to create calendar. Please try again.', 'error');
-            }
-        });
-    }
 
     // Initialize
     document.addEventListener('DOMContentLoaded', async () => {

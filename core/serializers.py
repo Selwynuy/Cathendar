@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from .models import User, Calendar, Event, Availability, Friend, CalendarShare
+from .models import User, Calendar, Event, Availability, Friend, CalendarShare, Holiday
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -101,5 +101,12 @@ class CalendarShareSerializer(serializers.ModelSerializer):
     class Meta:
         model = CalendarShare
         fields = ['id', 'calendar', 'calendar_name', 'user', 'user_id', 'permission']
+        read_only_fields = ['id']
+
+
+class HolidaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Holiday
+        fields = ['id', 'date', 'name', 'country', 'description', 'is_national']
         read_only_fields = ['id']
 

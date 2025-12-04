@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     UserRegistrationView, UserLoginView, UserViewSet,
     CalendarViewSet, EventViewSet, AvailabilityViewSet,
-    FriendViewSet, CalendarShareViewSet
+    FriendViewSet, CalendarShareViewSet, HolidayViewSet
 )
 from .admin_views import (
     AdminUserViewSet, AdminCalendarViewSet, AdminEventViewSet, AdminAnalyticsViewSet
@@ -17,6 +17,7 @@ router.register(r'events', EventViewSet, basename='event')
 router.register(r'availability', AvailabilityViewSet, basename='availability')
 router.register(r'friends', FriendViewSet, basename='friend')
 router.register(r'calendar-shares', CalendarShareViewSet, basename='calendar-share')
+router.register(r'holidays', HolidayViewSet, basename='holiday')
 
 # Admin panel routes
 admin_router = DefaultRouter()

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Calendar, Event, Availability, Friend, CalendarShare
+from .models import User, Calendar, Event, Availability, Friend, CalendarShare, Holiday
 
 
 @admin.register(User)
@@ -40,3 +40,11 @@ class FriendAdmin(admin.ModelAdmin):
 class CalendarShareAdmin(admin.ModelAdmin):
     list_display = ['calendar', 'user', 'permission']
     list_filter = ['permission', 'calendar']
+
+
+@admin.register(Holiday)
+class HolidayAdmin(admin.ModelAdmin):
+    list_display = ['name', 'date', 'country', 'is_national']
+    search_fields = ['name', 'description']
+    list_filter = ['country', 'is_national', 'date']
+    date_hierarchy = 'date'
