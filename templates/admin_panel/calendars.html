@@ -1,0 +1,325 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block page_title %}Calendars Management{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>All Calendars</h3>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <div id="calendarStats" style="color: #64748b; font-size: 14px;">Loading...</div>
+            <button class="btn btn-primary" onclick="showCreateCalendar()">+ Create Calendar</button>
+        </div>
+    </div>
+
+    <div id="calendarsTable">
+        <div class="loading">Loading calendars...</div>
+    </div>
+</div>
+
+<div id="calendarModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button" onclick="closeModal()">&times;</span>
+        <h3 id="modalTitle">Calendar Details</h3>
+        <div id="modalBody"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .modal {
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        width: 90%;
+        max-width: 500px;
+        position: relative;
+    }
+
+    .close-button {
+        color: #aaa;
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close-button:hover,
+    .close-button:focus {
+        color: black;
+    }
+
+    .btn-sm {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+
+    .btn-info {
+        background-color: #0ea5e9;
+        color: white;
+    }
+
+    .btn-warning {
+        background-color: #f59e0b;
+        color: white;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #475569;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #3b82f6;
+    }
+
+    textarea.form-control {
+        min-height: 80px;
+        resize: vertical;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadCalendars() {
+        try {
+            const [calendars, stats] = await Promise.all([
+                fetchAPI('calendars/'),
+                fetchAPI('calendars/stats/')
+            ]);
+
+            document.getElementById('calendarStats').textContent = 
+                `Total: ${stats.total_calendars} | Shared: ${stats.shared_calendars}`;
+
+            if (calendars.results && calendars.results.length > 0) {
+                const tableHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Owner</th>
+                                <th>Description</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${calendars.results.map(cal => `
+                                <tr>
+                                    <td>${cal.id}</td>
+                                    <td><strong>${cal.name}</strong></td>
+                                    <td>${cal.owner.email}</td>
+                                    <td>${cal.description || '-'}</td>
+                                    <td>${new Date(cal.created_at).toLocaleDateString()}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info" onclick="viewCalendar(${cal.id})">View</button>
+                                        <button class="btn btn-sm btn-warning" onclick="editCalendar(${cal.id})">Edit</button>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteCalendar(${cal.id})">Delete</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                document.getElementById('calendarsTable').innerHTML = tableHTML;
+            } else {
+                document.getElementById('calendarsTable').innerHTML = 
+                    '<div class="loading">No calendars found.</div>';
+            }
+        } catch (error) {
+            document.getElementById('calendarsTable').innerHTML = 
+                '<div class="error">Failed to load calendars. Please refresh the page.</div>';
+        }
+    }
+
+    function openModal() {
+        document.getElementById('calendarModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('calendarModal').style.display = 'none';
+    }
+
+    async function viewCalendar(calendarId) {
+        try {
+            const calendar = await fetchAPI(`calendars/${calendarId}/`);
+            document.getElementById('modalTitle').textContent = 'View Calendar';
+            const modalBody = document.getElementById('modalBody');
+            modalBody.innerHTML = `
+                <p><strong>ID:</strong> ${calendar.id}</p>
+                <p><strong>Name:</strong> ${calendar.name}</p>
+                <p><strong>Owner:</strong> ${calendar.owner.email}</p>
+                <p><strong>Description:</strong> ${calendar.description || '-'}</p>
+                <p><strong>Created At:</strong> ${new Date(calendar.created_at).toLocaleString()}</p>
+            `;
+            openModal();
+        } catch (error) {
+            showNotification('Error', 'Failed to load calendar details. Please try again.', 'error');
+        }
+    }
+
+    async function editCalendar(calendarId) {
+        try {
+            const calendar = await fetchAPI(`calendars/${calendarId}/`);
+            document.getElementById('modalTitle').textContent = 'Edit Calendar';
+            const modalBody = document.getElementById('modalBody');
+            modalBody.innerHTML = `
+                <form id="editCalendarForm">
+                    <input type="hidden" name="id" value="${calendar.id}">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" name="name" class="form-control" value="${calendar.name}">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description" class="form-control">${calendar.description || ''}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </form>
+            `;
+            openModal();
+
+            document.getElementById('editCalendarForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                await saveCalendar(calendar.id, data);
+            });
+        } catch (error) {
+            showNotification('Error', 'Failed to load calendar details for editing. Please try again.', 'error');
+        }
+    }
+
+    async function saveCalendar(calendarId, data) {
+        try {
+            const updateData = {
+                name: data.name,
+                description: data.description || ''
+            };
+            await fetchAPI(`calendars/${calendarId}/`, {
+                method: 'PUT',
+                body: JSON.stringify(updateData),
+            });
+            closeModal();
+            showNotification('Success', 'Calendar updated successfully!', 'success');
+            loadCalendars();
+        } catch (error) {
+            showNotification('Error', 'Failed to save calendar details: ' + (error.message || 'Unknown error'), 'error');
+        }
+    }
+
+    async function deleteCalendar(calendarId) {
+        showConfirm(
+            'Delete Calendar',
+            `Are you sure you want to delete calendar ${calendarId}? This action cannot be undone.`,
+            async () => {
+                try {
+                    await fetchAPI(`calendars/${calendarId}/`, {
+                        method: 'DELETE',
+                    });
+                    showNotification('Success', 'Calendar deleted successfully!', 'success');
+                    loadCalendars();
+                } catch (error) {
+                    showNotification('Error', 'Failed to delete calendar. Please try again.', 'error');
+                }
+            }
+        );
+    }
+
+    async function showCreateCalendar() {
+        // Load users for owner selection
+        try {
+            const users = await fetchAPI('users/');
+            const userList = users.results || users;
+            
+            document.getElementById('modalTitle').textContent = 'Create New Calendar';
+            const modalBody = document.getElementById('modalBody');
+            modalBody.innerHTML = `
+                <form id="createCalendarForm">
+                    <div class="form-group">
+                        <label>Name *</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description" class="form-control"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Owner *</label>
+                        <select name="owner_id" class="form-control" required>
+                            ${userList.map(u => `<option value="${u.id}">${u.email} (${u.username})</option>`).join('')}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Calendar</button>
+                </form>
+            `;
+            openModal();
+
+            document.getElementById('createCalendarForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                await createCalendar(data);
+            });
+        } catch (error) {
+            showNotification('Error', 'Failed to load users for calendar creation. Please try again.', 'error');
+        }
+    }
+
+    async function createCalendar(data) {
+        try {
+            await fetchAPI('calendars/', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: data.name,
+                    description: data.description || '',
+                    owner_id: parseInt(data.owner_id)
+                })
+            });
+            closeModal();
+            showNotification('Success', 'Calendar created successfully!', 'success');
+            loadCalendars();
+        } catch (error) {
+            showNotification('Error', 'Failed to create calendar. Please try again.', 'error');
+        }
+    }
+
+    loadCalendars();
+</script>
+{% endblock %}
+

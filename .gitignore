@@ -50,3 +50,9 @@ db.sqlite3-journal
 .DS_Store
 Thumbs.db
 
+PROJECT_PLAN.md 
+API_DOCUMENTATION.md
+ADMIN_PANEL.md
+
+register_user.py
+make_staff.py

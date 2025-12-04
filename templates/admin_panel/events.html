@@ -1,0 +1,350 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block page_title %}Events Management{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>All Events</h3>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <div id="eventStats" style="color: #64748b; font-size: 14px;">Loading...</div>
+            <button class="btn btn-primary" onclick="showCreateEvent()">+ Create Event</button>
+        </div>
+    </div>
+
+    <div id="eventsTable">
+        <div class="loading">Loading events...</div>
+    </div>
+</div>
+
+<div id="eventModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button" onclick="closeModal()">&times;</span>
+        <h3 id="modalTitle">Event Details</h3>
+        <div id="modalBody"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .modal {
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        width: 90%;
+        max-width: 500px;
+        position: relative;
+    }
+
+    .close-button {
+        color: #aaa;
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close-button:hover,
+    .close-button:focus {
+        color: black;
+    }
+
+    .btn-sm {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+
+    .btn-info {
+        background-color: #0ea5e9;
+        color: white;
+    }
+
+    .btn-warning {
+        background-color: #f59e0b;
+        color: white;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #475569;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #3b82f6;
+    }
+
+    textarea.form-control {
+        min-height: 80px;
+        resize: vertical;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadEvents() {
+        try {
+            const [events, stats] = await Promise.all([
+                fetchAPI('events/'),
+                fetchAPI('events/stats/')
+            ]);
+
+            document.getElementById('eventStats').textContent = 
+                `Total: ${stats.total_events} | Upcoming: ${stats.upcoming_events}`;
+
+            if (events.results && events.results.length > 0) {
+                const tableHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Title</th>
+                                <th>Calendar</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${events.results.map(event => `
+                                <tr>
+                                    <td>${event.id}</td>
+                                    <td><strong>${event.title}</strong></td>
+                                    <td>${event.calendar_name}</td>
+                                    <td>${new Date(event.start_time).toLocaleString()}</td>
+                                    <td>${new Date(event.end_time).toLocaleString()}</td>
+                                    <td>${new Date(event.created_at).toLocaleDateString()}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info" onclick="viewEvent(${event.id})">View</button>
+                                        <button class="btn btn-sm btn-warning" onclick="editEvent(${event.id})">Edit</button>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteEvent(${event.id})">Delete</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                document.getElementById('eventsTable').innerHTML = tableHTML;
+            } else {
+                document.getElementById('eventsTable').innerHTML = 
+                    '<div class="loading">No events found.</div>';
+            }
+        } catch (error) {
+            document.getElementById('eventsTable').innerHTML = 
+                '<div class="error">Failed to load events. Please refresh the page.</div>';
+        }
+    }
+
+    function openModal() {
+        document.getElementById('eventModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('eventModal').style.display = 'none';
+    }
+
+    async function viewEvent(eventId) {
+        try {
+            const event = await fetchAPI(`events/${eventId}/`);
+            document.getElementById('modalTitle').textContent = 'View Event';
+            const modalBody = document.getElementById('modalBody');
+            modalBody.innerHTML = `
+                <p><strong>ID:</strong> ${event.id}</p>
+                <p><strong>Title:</strong> ${event.title}</p>
+                <p><strong>Calendar:</strong> ${event.calendar_name}</p>
+                <p><strong>Description:</strong> ${event.description || '-'}</p>
+                <p><strong>Start Time:</strong> ${new Date(event.start_time).toLocaleString()}</p>
+                <p><strong>End Time:</strong> ${new Date(event.end_time).toLocaleString()}</p>
+                <p><strong>Created At:</strong> ${new Date(event.created_at).toLocaleString()}</p>
+            `;
+            openModal();
+        } catch (error) {
+            showNotification('Error', 'Failed to load event details. Please try again.', 'error');
+        }
+    }
+
+    async function editEvent(eventId) {
+        try {
+            const event = await fetchAPI(`events/${eventId}/`);
+            document.getElementById('modalTitle').textContent = 'Edit Event';
+            const modalBody = document.getElementById('modalBody');
+            modalBody.innerHTML = `
+                <form id="editEventForm">
+                    <input type="hidden" name="id" value="${event.id}">
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" name="title" class="form-control" value="${event.title}">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description" class="form-control">${event.description || ''}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="datetime-local" name="start_time" class="form-control" value="${new Date(event.start_time).toISOString().slice(0,16)}">
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="datetime-local" name="end_time" class="form-control" value="${new Date(event.end_time).toISOString().slice(0,16)}">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </form>
+            `;
+            openModal();
+
+            document.getElementById('editEventForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                await saveEvent(event.id, data);
+            });
+        } catch (error) {
+            showNotification('Error', 'Failed to load event details for editing. Please try again.', 'error');
+        }
+    }
+
+    async function saveEvent(eventId, data) {
+        try {
+            // Convert datetime-local to ISO format
+            const updateData = {
+                title: data.title,
+                description: data.description || '',
+                start_time: new Date(data.start_time).toISOString(),
+                end_time: new Date(data.end_time).toISOString()
+            };
+            await fetchAPI(`events/${eventId}/`, {
+                method: 'PUT',
+                body: JSON.stringify(updateData),
+            });
+            closeModal();
+            showNotification('Success', 'Event updated successfully!', 'success');
+            loadEvents();
+        } catch (error) {
+            showNotification('Error', 'Failed to save event details: ' + (error.message || 'Unknown error'), 'error');
+        }
+    }
+
+    async function deleteEvent(eventId) {
+        showConfirm(
+            'Delete Event',
+            `Are you sure you want to delete event ${eventId}? This action cannot be undone.`,
+            async () => {
+                try {
+                    await fetchAPI(`events/${eventId}/`, {
+                        method: 'DELETE',
+                    });
+                    showNotification('Success', 'Event deleted successfully!', 'success');
+                    loadEvents();
+                } catch (error) {
+                    showNotification('Error', 'Failed to delete event. Please try again.', 'error');
+                }
+            }
+        );
+    }
+
+    async function showCreateEvent() {
+        try {
+            const calendars = await fetchAPI('calendars/');
+            const calendarList = calendars.results || calendars;
+            
+            document.getElementById('modalTitle').textContent = 'Create New Event';
+            const modalBody = document.getElementById('modalBody');
+            const now = new Date();
+            const defaultStart = new Date(now.getTime() + 60*60*1000).toISOString().slice(0,16);
+            const defaultEnd = new Date(now.getTime() + 2*60*60*1000).toISOString().slice(0,16);
+            
+            modalBody.innerHTML = `
+                <form id="createEventForm">
+                    <div class="form-group">
+                        <label>Title *</label>
+                        <input type="text" name="title" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description" class="form-control"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Calendar *</label>
+                        <select name="calendar" class="form-control" required>
+                            ${calendarList.map(c => `<option value="${c.id}">${c.name} (${c.owner.email})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time *</label>
+                        <input type="datetime-local" name="start_time" class="form-control" value="${defaultStart}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>End Time *</label>
+                        <input type="datetime-local" name="end_time" class="form-control" value="${defaultEnd}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Event</button>
+                </form>
+            `;
+            openModal();
+
+            document.getElementById('createEventForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                // Convert datetime-local to ISO format
+                data.start_time = new Date(data.start_time).toISOString();
+                data.end_time = new Date(data.end_time).toISOString();
+                await createEvent(data);
+            });
+        } catch (error) {
+            showNotification('Error', 'Failed to load calendars for event creation. Please try again.', 'error');
+        }
+    }
+
+    async function createEvent(data) {
+        try {
+            await fetchAPI('events/', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+            closeModal();
+            showNotification('Success', 'Event created successfully!', 'success');
+            loadEvents();
+        } catch (error) {
+            showNotification('Error', 'Failed to create event. Please try again.', 'error');
+        }
+    }
+
+    loadEvents();
+</script>
+{% endblock %}
+

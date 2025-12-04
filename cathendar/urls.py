@@ -15,12 +15,17 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from calendar_app import views as calendar_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('admin-panel/', include('admin_panel.urls')),
+    path('api/', include('core.urls')),
+    path('accounts/login/', calendar_views.login_view, name='accounts_login'),  # Django default redirect
+    path('', include('calendar_app.urls')),
 ]
 
 if settings.DEBUG:

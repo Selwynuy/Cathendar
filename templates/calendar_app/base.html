@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Cathendar - Calendar{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .app-header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .app-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .app-header h1 i {
+            -webkit-background-clip: unset;
+            -webkit-text-fill-color: unset;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #667eea;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-info {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e1;
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .content-wrapper {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            min-height: 600px;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header class="app-header">
+        <h1><i class="fas fa-calendar-alt"></i> Cathendar</h1>
+        <div class="user-menu">
+            <span class="user-info">{{ user.email }}</span>
+            <a href="{% url 'calendar_app:logout' %}" class="btn btn-secondary">Logout</a>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <div class="content-wrapper">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = '/api/';
+        let authToken = null;
+
+        // Try to get token from localStorage or session
+        const getAuthHeaders = () => {
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            return headers;
+        };
+
+        const fetchAPI = async (endpoint, options = {}) => {
+            try {
+                const response = await fetch(API_BASE + endpoint, {
+                    ...options,
+                    headers: {
+                        ...getAuthHeaders(),
+                        ...options.headers,
+                    },
+                    credentials: 'include',
+                });
+                
+                if (response.status === 401) {
+                    // Redirect to login if unauthorized
+                    window.location.href = '/login/';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Handle 204 No Content (common for DELETE requests)
+                if (response.status === 204 || response.status === 201) {
+                    // Check if there's actually content to parse
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        return null; // Success but no content
+                    }
+                }
+                
+                // Try to parse JSON, but handle empty responses gracefully
+                const text = await response.text();
+                if (!text) {
+                    return null; // Empty response is OK for DELETE
+                }
+                return JSON.parse(text);
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        };
+
+        // Check if user is authenticated (optional - session auth handles redirect)
+        document.addEventListener('DOMContentLoaded', () => {
+            // Session auth will redirect if not logged in, so this is just for JWT token
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                authToken = token;
+            }
+        });
+    </script>
+    <!-- Notification Modal -->
+    <div id="notificationModal" class="modal" style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;" onclick="if(event.target === this) closeNotificationModal()">
+        <div style="background-color: #ffffff; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 90%; max-width: 400px; position: relative;" onclick="event.stopPropagation()">
+            <button onclick="closeNotificationModal()" style="color: #94a3b8; position: absolute; top: 20px; right: 20px; font-size: 28px; font-weight: bold; cursor: pointer; background: none; border: none; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;" aria-label="Close">&times;</button>
+            <div id="notificationContent" style="padding: 20px 0;">
+                <div id="notificationIcon" style="font-size: 48px; text-align: center; margin-bottom: 15px;"></div>
+                <h3 id="notificationTitle" style="text-align: center; margin-bottom: 10px; font-size: 20px; font-weight: 600; color: #1e293b;"></h3>
+                <p id="notificationMessage" style="text-align: center; color: #64748b; margin-bottom: 20px; font-size: 14px;"></p>
+                <button id="notificationButton" class="btn btn-primary" style="width: 100%;" onclick="closeNotificationModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal" style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;" onclick="if(event.target === this) closeConfirmModal()">
+        <div style="background-color: #ffffff; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 90%; max-width: 400px; position: relative;" onclick="event.stopPropagation()">
+            <button onclick="closeConfirmModal()" style="color: #94a3b8; position: absolute; top: 20px; right: 20px; font-size: 28px; font-weight: bold; cursor: pointer; background: none; border: none; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;" aria-label="Close">&times;</button>
+            <div id="confirmContent" style="padding: 20px 0;">
+                <div style="font-size: 48px; text-align: center; margin-bottom: 15px;"><i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i></div>
+                <h3 id="confirmTitle" style="text-align: center; margin-bottom: 10px; font-size: 20px; font-weight: 600; color: #1e293b;">Confirm Action</h3>
+                <p id="confirmMessage" style="text-align: center; color: #64748b; margin-bottom: 20px; font-size: 14px;"></p>
+                <div style="display: flex; gap: 10px;">
+                    <button id="confirmCancel" class="btn btn-secondary" style="flex: 1;" onclick="closeConfirmModal()">Cancel</button>
+                    <button id="confirmOk" class="btn btn-danger" style="flex: 1;" onclick="executeConfirmAction()">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Notification Modal Functions
+        let confirmCallback = null;
+
+        function showNotification(title, message, type = 'info') {
+            const modal = document.getElementById('notificationModal');
+            const icon = document.getElementById('notificationIcon');
+            const titleEl = document.getElementById('notificationTitle');
+            const messageEl = document.getElementById('notificationMessage');
+            const button = document.getElementById('notificationButton');
+
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+
+            const icons = {
+                success: '<i class="fas fa-check-circle"></i>',
+                error: '<i class="fas fa-times-circle"></i>',
+                warning: '<i class="fas fa-exclamation-triangle"></i>',
+                info: '<i class="fas fa-info-circle"></i>'
+            };
+
+            const colors = {
+                success: '#10b981',
+                error: '#ef4444',
+                warning: '#f59e0b',
+                info: '#3b82f6'
+            };
+
+            icon.innerHTML = icons[type] || icons.info;
+            button.style.background = `linear-gradient(135deg, ${colors[type]} 0%, ${colors[type]}dd 100%)`;
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeNotificationModal() {
+            document.getElementById('notificationModal').style.display = 'none';
+        }
+
+        // Confirmation Modal Functions
+        function showConfirm(title, message, callback) {
+            const modal = document.getElementById('confirmModal');
+            const titleEl = document.getElementById('confirmTitle');
+            const messageEl = document.getElementById('confirmMessage');
+
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            confirmCallback = callback;
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').style.display = 'none';
+            confirmCallback = null;
+        }
+
+        function executeConfirmAction() {
+            if (confirmCallback) {
+                confirmCallback();
+            }
+            closeConfirmModal();
+        }
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+

@@ -1,0 +1,115 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block page_title %}Analytics Dashboard{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>Total Users</h3>
+        <div class="value" id="totalUsers">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Active Users (30 days)</h3>
+        <div class="value" id="activeUsers">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Total Calendars</h3>
+        <div class="value" id="totalCalendars">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Shared Calendars</h3>
+        <div class="value" id="sharedCalendars">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Total Events</h3>
+        <div class="value" id="totalEvents">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Upcoming Events</h3>
+        <div class="value" id="upcomingEvents">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Availability Markers</h3>
+        <div class="value" id="totalAvailabilities">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Busy Markers</h3>
+        <div class="value" id="busyMarkers">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Total Friendships</h3>
+        <div class="value" id="totalFriendships">-</div>
+    </div>
+</div>
+
+<div class="content-card">
+    <h3 style="margin-bottom: 20px;">Detailed Analytics</h3>
+    <div id="analyticsDetails">
+        <div class="loading">Loading analytics...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadAnalytics() {
+        try {
+            console.log('Loading analytics data...');
+            const data = await fetchAPI('analytics/dashboard/');
+            console.log('Analytics data loaded:', data);
+            
+            if (data && data.users) {
+                document.getElementById('totalUsers').textContent = data.users.total || 0;
+                document.getElementById('activeUsers').textContent = data.users.active || 0;
+                document.getElementById('totalCalendars').textContent = data.calendars.total || 0;
+                document.getElementById('sharedCalendars').textContent = data.calendars.shared || 0;
+                document.getElementById('totalEvents').textContent = data.events.total || 0;
+                document.getElementById('upcomingEvents').textContent = data.events.upcoming || 0;
+                document.getElementById('totalAvailabilities').textContent = data.availability.total_markers || 0;
+                document.getElementById('busyMarkers').textContent = data.availability.busy_markers || 0;
+                document.getElementById('totalFriendships').textContent = data.friendships.total || 0;
+
+                const detailsHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+                        <div>
+                            <h4 style="margin-bottom: 10px; color: #475569;">User Statistics</h4>
+                            <p>Total Users: <strong>${data.users.total || 0}</strong></p>
+                            <p>Active Users (30 days): <strong>${data.users.active || 0}</strong></p>
+                            <p>Inactive Users: <strong>${(data.users.total || 0) - (data.users.active || 0)}</strong></p>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: 10px; color: #475569;">Calendar Statistics</h4>
+                            <p>Total Calendars: <strong>${data.calendars.total || 0}</strong></p>
+                            <p>Shared Calendars: <strong>${data.calendars.shared || 0}</strong></p>
+                            <p>Private Calendars: <strong>${(data.calendars.total || 0) - (data.calendars.shared || 0)}</strong></p>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: 10px; color: #475569;">Event Statistics</h4>
+                            <p>Total Events: <strong>${data.events.total || 0}</strong></p>
+                            <p>Upcoming Events: <strong>${data.events.upcoming || 0}</strong></p>
+                            <p>Past Events: <strong>${(data.events.total || 0) - (data.events.upcoming || 0)}</strong></p>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: 10px; color: #475569;">Availability Statistics</h4>
+                            <p>Total Markers: <strong>${data.availability.total_markers || 0}</strong></p>
+                            <p>Busy Markers: <strong>${data.availability.busy_markers || 0}</strong></p>
+                            <p>Available Markers: <strong>${(data.availability.total_markers || 0) - (data.availability.busy_markers || 0)}</strong></p>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('analyticsDetails').innerHTML = detailsHTML;
+            } else {
+                throw new Error('Invalid response format');
+            }
+        } catch (error) {
+            console.error('Analytics load error:', error);
+            const errorMsg = error.message || 'Unknown error';
+            document.getElementById('analyticsDetails').innerHTML = 
+                '<div class="error" style="padding: 20px; text-align: center;">Failed to load analytics.<br><small style="color: #64748b;">Error: ' + errorMsg + '</small><br><button onclick="location.reload()" class="btn btn-primary" style="margin-top: 10px;">Refresh Page</button></div>';
+        }
+    }
+
+    loadAnalytics();
+</script>
+{% endblock %}
+

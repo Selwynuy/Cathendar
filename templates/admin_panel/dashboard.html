@@ -1,0 +1,73 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+        <h3>Total Users</h3>
+        <div class="value" id="totalUsers">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Active Users</h3>
+        <div class="value" id="activeUsers">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Total Calendars</h3>
+        <div class="value" id="totalCalendars">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Shared Calendars</h3>
+        <div class="value" id="sharedCalendars">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Total Events</h3>
+        <div class="value" id="totalEvents">-</div>
+    </div>
+    <div class="stat-card">
+        <h3>Upcoming Events</h3>
+        <div class="value" id="upcomingEvents">-</div>
+    </div>
+</div>
+
+<div class="content-card">
+    <h3 style="margin-bottom: 20px;">Quick Actions</h3>
+    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        <a href="{% url 'admin_panel:users' %}" class="btn btn-primary">Manage Users</a>
+        <a href="{% url 'admin_panel:calendars' %}" class="btn btn-primary">Manage Calendars</a>
+        <a href="{% url 'admin_panel:events' %}" class="btn btn-primary">Manage Events</a>
+        <a href="{% url 'admin_panel:analytics' %}" class="btn btn-primary">View Analytics</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadDashboard() {
+        try {
+            console.log('Loading dashboard data...');
+            const data = await fetchAPI('analytics/dashboard/');
+            console.log('Dashboard data loaded:', data);
+            
+            if (data && data.users) {
+                document.getElementById('totalUsers').textContent = data.users.total || 0;
+                document.getElementById('activeUsers').textContent = data.users.active || 0;
+                document.getElementById('totalCalendars').textContent = data.calendars.total || 0;
+                document.getElementById('sharedCalendars').textContent = data.calendars.shared || 0;
+                document.getElementById('totalEvents').textContent = data.events.total || 0;
+                document.getElementById('upcomingEvents').textContent = data.events.upcoming || 0;
+            } else {
+                throw new Error('Invalid response format');
+            }
+        } catch (error) {
+            console.error('Dashboard load error:', error);
+            const errorMsg = error.message || 'Unknown error';
+            document.getElementById('statsGrid').innerHTML = 
+                '<div class="error" style="padding: 20px; text-align: center;">Failed to load dashboard data.<br><small style="color: #64748b;">Error: ' + errorMsg + '</small><br><button onclick="location.reload()" class="btn btn-primary" style="margin-top: 10px;">Refresh Page</button></div>';
+        }
+    }
+
+    loadDashboard();
+</script>
+{% endblock %}
+
