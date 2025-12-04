@@ -147,15 +147,26 @@ Follow the prompts to create an admin user.
 
 #### Create Staff User (for Custom Admin Panel)
 
-You can either:
-1. Use Django admin to set `is_staff=True` for a user
-2. Or use the provided script:
+To access the custom admin panel, you need to grant staff privileges to a user. You can do this through Django admin:
 
+1. Go to http://127.0.0.1:8000/admin/
+2. Login with your superuser account
+3. Navigate to Users
+4. Select the user you want to make staff
+5. Check the "Staff status" checkbox
+6. Save the user
+
+Alternatively, you can use Django shell:
 ```bash
-python make_staff.py
+python manage.py shell
 ```
-
-This will prompt you to enter a username and grant staff privileges.
+Then run:
+```python
+from core.models import User
+user = User.objects.get(username='your_username')
+user.is_staff = True
+user.save()
+```
 
 ### 7. Populate Public Holidays
 
